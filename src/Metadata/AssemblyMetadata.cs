@@ -80,6 +80,12 @@ namespace Lokad.ILPack.Metadata
                 .GroupBy(assembly => assembly.Name)
                 .Select(group => group.First());
 
+
+            var a = AppDomain.CurrentDomain.GetAssemblies().Single(a => a.GetName().Name == "System.Runtime.CompilerServices.Unsafe");
+            // assemblies = assemblies.Append(a.GetName());
+            AddReferencedAssembly(a.GetName().Name, a.GetName());
+            _reverseForwardingMap.Add("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler", a.GetName());
+
             CreateReferencedAssemblies(assemblies);
         }
 
