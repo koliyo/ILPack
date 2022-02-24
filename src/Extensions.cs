@@ -291,7 +291,7 @@ namespace Lokad.ILPack
                 var pi = ty.GetMethod("GetRawBytes", BindingFlags.Instance | BindingFlags.NonPublic);
                 byte[] peImage = null;
                 if (pi == null) {
-                    if (!String.IsNullOrEmpty(assembly.Location))
+                    if (!assembly.IsDynamic && !String.IsNullOrEmpty(assembly.Location))
                         peImage = File.ReadAllBytes(assembly.Location);
                     else
                         return false;
