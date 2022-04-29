@@ -31,9 +31,9 @@ namespace Lokad.ILPack.Metadata
 
             if (methodBase.DeclaringType.IsConstructedGenericType)
             {
-                // When calling methods on constructed generic types, the type is the constructed 
+                // When calling methods on constructed generic types, the type is the constructed
                 // type name, but the method info is the method from the open type definition. eg:
-                // 
+                //
                 // callvirt instance void class System.Action`1<int32>::Invoke(!0)
                 //                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^          ^
                 //                            constructed type here             |
@@ -49,13 +49,13 @@ namespace Lokad.ILPack.Metadata
                 // There doesn't seem to be a reflection API method to get the definition method.
                 // Note: MethodInfo.GetGenericMethodDefinition won't work here because this is a
                 // non-generic method in a generic type (as opposed to a generic method)
-                // 
+                //
                 // Luckily both the original and the constructed type's method have the same meta
-                // data token so we just go to the original generic definition and find the 
+                // data token so we just go to the original generic definition and find the
                 // method with the same token.
                 //
                 // TODO: What about generic method definitions in a generic type???
-                System.Diagnostics.Debug.Assert(!methodBase.IsGenericMethod);
+                // System.Diagnostics.Debug.Assert(!methodBase.IsGenericMethod);
 
                 var definition = methodBase.DeclaringType.GetGenericTypeDefinition();
                 if (methodBase is MethodInfo)
