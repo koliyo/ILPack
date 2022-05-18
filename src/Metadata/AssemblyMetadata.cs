@@ -99,10 +99,10 @@ namespace Lokad.ILPack.Metadata
             }
 
 
-            var a = AppDomain.CurrentDomain.GetAssemblies().Single(a => a.GetName().Name == "System.Runtime.CompilerServices.Unsafe");
-            // assemblies = assemblies.Append(a.GetName());
-            AddReferencedAssembly(a.GetName().Name, a.GetName());
-            _reverseForwardingMap.Add("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler", a.GetName());
+            // var a = AppDomain.CurrentDomain.GetAssemblies().Single(a => a.GetName().Name == "System.Runtime.CompilerServices.Unsafe");
+            // // assemblies = assemblies.Append(a.GetName());
+            // AddReferencedAssembly(a.GetName().Name, a.GetName());
+            // _reverseForwardingMap.Add("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler", a.GetName());
 
             CreateReferencedAssemblies(assemblies);
         }
@@ -136,14 +136,14 @@ namespace Lokad.ILPack.Metadata
         {
             return value != null ? Builder.GetOrAddString(value) : default;
         }
-        
+
         private SignatureTypeEncoder AddCustomModifiers(SignatureTypeEncoder encoder, FieldInfo info)
         {
             AddCustomModifiers(encoder.CustomModifiers(),
                 info.GetRequiredCustomModifiers(), info.GetOptionalCustomModifiers());
             return encoder;
         }
-        
+
         private void AddCustomModifiers(ParameterTypeEncoder encoder, ParameterInfo info) =>
             AddCustomModifiers(encoder.CustomModifiers(),
                 info.GetRequiredCustomModifiers(), info.GetOptionalCustomModifiers());
