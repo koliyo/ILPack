@@ -700,5 +700,94 @@ namespace Lokad.ILPack.Tests
             Assert.True(IsTinyMethod(methodInfo));
             Assert.True(IsTinyMethod(constructorInfo));
         }
+
+        [Fact]
+        public void TestInterpolatedStrings()
+        {
+            var assemblyName = new AssemblyName { Name = "MyAssembly" };
+            var newAssembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+            var newModule = newAssembly.DefineDynamicModule("MyModule");
+
+            // Define a type with no namespace
+            var myType = newModule.DefineType("MyClass", TypeAttributes.Public);
+
+            // Define a method to just return a new instance of anonymous type.
+            var myMethod = myType.DefineMethod("MyMethod", MethodAttributes.Public, typeof(string), Type.EmptyTypes);
+            var generator = myMethod.GetILGenerator();
+            var builder = generator.DeclareLocal(typeof(System.Runtime.CompilerServices.DefaultInterpolatedStringHandler));
+            generator.Emit(OpCodes.Ldloca, builder.LocalIndex);
+            generator.Emit(OpCodes.Ldc_I4, 0);
+            generator.Emit(OpCodes.Ldc_I4, 0);
+
+            var DefaultInterpolatedStringHandlerConstructorInfo = builder.LocalType.GetConstructor(new[] { typeof(int), typeof(int) })!;
+            var ToStringAndClearInfo = builder.LocalType.GetMethod("ToStringAndClear", Type.EmptyTypes)!;
+
+            generator.Emit(OpCodes.Call, DefaultInterpolatedStringHandlerConstructorInfo);
+            generator.Emit(OpCodes.Ldloca, builder.LocalIndex);
+            generator.Emit(OpCodes.Call, ToStringAndClearInfo);
+            generator.Emit(OpCodes.Ret);
+
+            myType.CreateType();
+
+            SerializeAndVerifyAssembly(newAssembly, "InterpolatedStringsSerialization.dll");
+        }
+
+        [Fact]
+        public void TestSpecialCharacters()
+        {
+            /* SAVE */
+            var assemblyName = new AssemblyName { Name = "Assembly+" };
+
+            var newAssembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+            var newModule = newAssembly.DefineDynamicModule("Assembly+");
+
+            var myType = newModule.DefineType("Type+", TypeAttributes.Public);
+            myType.CreateType();
+
+            SerializeAndVerifyAssembly(newAssembly, "Assembly+.dll");
+
+            /* LOAD */
+            var assembly = LoadAssembly("Assembly+.dll");
+            var type = assembly.GetType("Type\\+");
+            Assert.NotNull(type);
+        }
+                
+        [Fact]
+        public void TestMoreSpecialCharacters()
+        {
+            /* SAVE */
+            var assemblyName = new AssemblyName { Name = "Assembly++" };
+
+            var newAssembly = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+            var newModule = newAssembly.DefineDynamicModule("Assembly++");
+
+            var myType = newModule.DefineType("A.B*C.D&E", TypeAttributes.Public);
+            myType.CreateType();
+            
+            var nested = myType.DefineNestedType("F", TypeAttributes.NestedPublic);
+            nested.CreateType();
+
+            SerializeAndVerifyAssembly(newAssembly, "Assembly++.dll");
+
+            /* LOAD */
+            Assembly assembly = LoadAssembly("Assembly++.dll");
+            Type type = assembly.GetType(@"A.B\*C.D\&E+F");
+            Assert.NotNull(type);
+        }
+
+        [Fact]
+        public void TestUnescape()
+        {
+            Assert.Equal(@"", AssemblyGenerator.Unescape(@""));
+            Assert.Equal(@"x", AssemblyGenerator.Unescape(@"x"));
+            Assert.Equal(@"\", AssemblyGenerator.Unescape(@"\"));
+            Assert.Equal(@"\", AssemblyGenerator.Unescape(@"\\"));
+            Assert.Equal(@"\\", AssemblyGenerator.Unescape(@"\\\"));
+            Assert.Equal(@"\\", AssemblyGenerator.Unescape(@"\\\\"));
+
+            Assert.Equal(@"\x", AssemblyGenerator.Unescape(@"\x"));
+            Assert.Equal(@"x\", AssemblyGenerator.Unescape(@"x\"));
+            Assert.Equal(@"A.B*C.D&E+F", AssemblyGenerator.Unescape(@"A.B\*C.D\&E+F"));
+        }
     }
 }

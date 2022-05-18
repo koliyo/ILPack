@@ -4,12 +4,17 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Text;
+using System.Text.RegularExpressions;
 using Lokad.ILPack.Metadata;
 
 namespace Lokad.ILPack
 {
     public partial class AssemblyGenerator
     {
+        private static readonly Regex FixTypeNameRegex =
+            new Regex(@"(\\)([.,&+*\[\]\\])", RegexOptions.Compiled | RegexOptions.Singleline);
+
         private void CreateTypes(IEnumerable<Type> types, List<DelayedWrite> genericParams)
         {
             var offsets = new TypeDefinitionMetadataOffset()
@@ -86,7 +91,7 @@ namespace Lokad.ILPack
             var handle = _metadata.Builder.AddTypeDefinition(
                 type.Attributes,
                 type.DeclaringType == null ? _metadata.GetOrAddString(ApplyNameChange(type.Namespace)) : default(StringHandle),
-                _metadata.GetOrAddString(type.Name),
+                _metadata.GetOrAddString(Unescape(type.Name)),
                 baseTypeHandle,
                 MetadataTokens.FieldDefinitionHandle(_metadata.Builder.GetRowCount(TableIndex.Field) + 1),
                 MetadataTokens.MethodDefinitionHandle(_metadata.Builder.GetRowCount(TableIndex.MethodDef) + 1));
@@ -155,6 +160,17 @@ namespace Lokad.ILPack
             CreateMethods(type.GetMethods(AllMethods), genericParams);
         }
 
+        /// <summary>
+        /// Converts any escaped characters in the input string. <see cref="Regex.Unescape(string)"/>
+        /// is a similar method but does some additional conversions that are not needed and wanted (?) here.
+        /// Special characters in type.Name are escaped with a backslash <c>\</c> according to
+        /// <a href="https://docs.microsoft.com/en-us/dotnet/framework/reflection-and-codedom/specifying-fully-qualified-type-names#specify-special-characters">docs</a>.
+        /// In order to serialized such types correctly, its name has to be "unescaped" before.
+        /// </summary>
+        /// <param name="str">The input string containing the text to convert.</param>
+        /// <returns>A string of characters with any escaped characters converted to their unescaped form.</returns>
+        internal static string Unescape(string str) => FixTypeNameRegex.Replace(str, "$2");
+
         private void DeclareInterfacesAndCreateInterfaceMap(Type type, TypeDefinitionHandle handle)
         {
             // Only add those interfaces that are not already implemented by the base type.
@@ -202,8 +218,8 @@ namespace Lokad.ILPack
                         // (This is the equivalent of .Override in msil)
                         _metadata.Builder.AddMethodImplementation(
                            (TypeDefinitionHandle)_metadata.GetTypeHandle(targetMethod.DeclaringType),
-                           _metadata.GetMethodHandle(targetMethod),
-                           _metadata.GetMethodHandle(ifcMethod));
+                           _metadata.GetMethodHandle(targetMethod, false),
+                           _metadata.GetMethodHandle(ifcMethod, false));
                     }
                 }
             }

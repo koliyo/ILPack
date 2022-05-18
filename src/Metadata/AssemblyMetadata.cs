@@ -9,6 +9,15 @@ namespace Lokad.ILPack.Metadata
 {
     internal partial class AssemblyMetadata : IAssemblyMetadata
     {
+        private sealed class AssemblyNameComparer : IEqualityComparer<AssemblyName>
+        {
+            public bool Equals(AssemblyName x, AssemblyName y) =>
+                string.Equals(x?.Name, y?.Name, StringComparison.Ordinal);
+
+            public int GetHashCode(AssemblyName obj) =>
+                obj.Name.GetHashCode();
+        }
+
         private const BindingFlags AllMethods =
             BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic |
             BindingFlags.DeclaredOnly | BindingFlags.CreateInstance | BindingFlags.Instance;
@@ -67,18 +76,27 @@ namespace Lokad.ILPack.Metadata
             _typeSpecHandles = new Dictionary<Type, TypeSpecificationHandle>();
             _referencedDynamics = referencedDynamicAssemblies.ToDictionary(a => a.FullName, a => a);
 
+            var assemblies = new HashSet<AssemblyName>(
+                sourceAssembly.GetReferencedAssemblies(), new AssemblyNameComparer());
 
-            var netstandardName = Assembly.Load("netstandard").GetName();
-
-            var assemblies = SourceAssembly.GetReferencedAssemblies()
+            var netstandardAssemblyName = Assembly.Load("netstandard").GetName();
+            if (!assemblies.Contains(netstandardAssemblyName))
+            {
                 // HACK: [vermorel] 2019-07-25. 'GetReferencedAssemblies()' does not capture all assemblies,
                 // only those that are explicitly referenced. Thus, we end-up  manually adding the assembly.
-                .Concat(new AssemblyName[] { Assembly.GetAssembly(typeof(object)).GetName() })
-                // Replace any reference to the private corelib implementation with netstandard
-                .Select(assembly => assembly.Name == "System.Private.CoreLib" ? netstandardName : assembly)
-                // Remove duplicate references by name
-                .GroupBy(assembly => assembly.Name)
-                .Select(group => group.First());
+                assemblies.Add(Assembly.GetAssembly(typeof(object)).GetName());
+            }
+
+            AppContext.TryGetSwitch(
+                "Lokad.ILPack.AssemblyGenerator.ReplaceCoreLibWithNetStandard",
+                out var isReplaceCorLibWithNetStandardEnabled);
+
+            if (isReplaceCorLibWithNetStandardEnabled &&
+                assemblies.Remove(Assembly.Load("System.Private.CoreLib").GetName()))
+            {
+                // Replace any reference to the private core library implementation with netstandard
+                assemblies.Add(netstandardAssemblyName);
+            }
 
 
             var a = AppDomain.CurrentDomain.GetAssemblies().Single(a => a.GetName().Name == "System.Runtime.CompilerServices.Unsafe");
@@ -88,7 +106,6 @@ namespace Lokad.ILPack.Metadata
 
             CreateReferencedAssemblies(assemblies);
         }
-
 
         public Assembly SourceAssembly { get; }
         public MetadataBuilder Builder { get; }
@@ -119,5 +136,27 @@ namespace Lokad.ILPack.Metadata
         {
             return value != null ? Builder.GetOrAddString(value) : default;
         }
+        
+        private SignatureTypeEncoder AddCustomModifiers(SignatureTypeEncoder encoder, FieldInfo info)
+        {
+            AddCustomModifiers(encoder.CustomModifiers(),
+                info.GetRequiredCustomModifiers(), info.GetOptionalCustomModifiers());
+            return encoder;
+        }
+        
+        private void AddCustomModifiers(ParameterTypeEncoder encoder, ParameterInfo info) =>
+            AddCustomModifiers(encoder.CustomModifiers(),
+                info.GetRequiredCustomModifiers(), info.GetOptionalCustomModifiers());
+
+        private void AddCustomModifiers(CustomModifiersEncoder cme,
+            IEnumerable<Type> requiredModifiers, IEnumerable<Type> optionalModifiers) =>
+            AddCustomModifiers(
+                AddCustomModifiers(cme, requiredModifiers, false),
+                optionalModifiers, true);
+
+        private CustomModifiersEncoder AddCustomModifiers(
+            CustomModifiersEncoder cme, IEnumerable<Type> modifiers, bool isOptional) =>
+            modifiers.Aggregate(cme, (current, modifier) =>
+                current.AddModifier(ResolveTypeReference(modifier), isOptional));
     }
 }

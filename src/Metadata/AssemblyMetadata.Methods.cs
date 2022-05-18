@@ -8,14 +8,16 @@ namespace Lokad.ILPack.Metadata
 {
     internal partial class AssemblyMetadata
     {
-        public EntityHandle GetMethodHandle(MethodInfo method)
+        public EntityHandle GetMethodHandle(MethodInfo method, Boolean inMethodBodyWritingContext)
         {
-            if (TryGetMethodDefinition(method, out var metadata))
+            if (method.DeclaringType?.IsConstructedGenericType == false &&
+                TryGetMethodDefinition(method, out var metadata))
             {
-                return metadata.Handle;
+                return inMethodBodyWritingContext ? ResolveMethodReference(method) : metadata.Handle;
             }
 
-            if (IsReferencedType(method.DeclaringType))
+            if (IsReferencedType(method.DeclaringType) ||
+                method.DeclaringType?.IsConstructedGenericType == true)
             {
                 return ResolveMethodReference(method);
             }
@@ -29,7 +31,7 @@ namespace Lokad.ILPack.Metadata
             // Method or Constructor? (must be one or the other)
             System.Diagnostics.Debug.Assert(methodBase is MethodInfo || methodBase is ConstructorInfo);
 
-            if (methodBase.DeclaringType.IsConstructedGenericType)
+            if (methodBase.DeclaringType?.IsConstructedGenericType == true)
             {
                 // When calling methods on constructed generic types, the type is the constructed
                 // type name, but the method info is the method from the open type definition. eg:
@@ -92,9 +94,13 @@ namespace Lokad.ILPack.Metadata
                     {
                         foreach (var par in parameters)
                         {
+                            var p = parEnc.AddParameter();
+
+                            AddCustomModifiers(p, par);
+
                             if (par.ParameterType.IsByRef)
                             {
-                                parEnc.AddParameter().Type(true).FromSystemType(par.ParameterType.GetElementType(), this);
+                                p.Type(true).FromSystemType(par.ParameterType.GetElementType(), this);
                             }
                             else
                             {
@@ -110,13 +116,6 @@ namespace Lokad.ILPack.Metadata
 
         private EntityHandle ResolveMethodReference(MethodInfo method)
         {
-            if (!IsReferencedType(method.DeclaringType))
-            {
-                throw new ArgumentException(
-                    $"Method of a reference type is expected: {MetadataHelper.GetFriendlyName(method)}",
-                    nameof(method));
-            }
-
             // Constructed generic method?
             if (method.IsConstructedGenericMethod())
             {
@@ -160,14 +159,6 @@ namespace Lokad.ILPack.Metadata
 
         public bool TryGetMethodDefinition(MethodInfo methodInfo, out MethodBaseDefinitionMetadata metadata)
         {
-            if (methodInfo.Module.Assembly == SourceAssembly
-                // && (methodInfo.DeclaringType.IsConstructedGenericType || methodInfo.IsConstructedGenericMethod())
-                && _unconstructedMethodDefs.TryGetValue(methodInfo.MetadataToken, out var baseMethod)
-            )
-            {
-                methodInfo = baseMethod;
-            }
-
             return _methodDefHandles.TryGetValue(methodInfo, out metadata);
         }
 
