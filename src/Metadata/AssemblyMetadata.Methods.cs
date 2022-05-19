@@ -11,7 +11,7 @@ namespace Lokad.ILPack.Metadata
         public EntityHandle GetMethodHandle(MethodInfo method, Boolean inMethodBodyWritingContext)
         {
             if (method.DeclaringType?.IsConstructedGenericType == false &&
-                TryGetMethodDefinition(method, out var metadata))
+                TryGetMethodDefinition(method.IsGenericMethod ? method.GetGenericMethodDefinition() : method, out var metadata))
             {
                 return inMethodBodyWritingContext ? ResolveMethodReference(method) : metadata.Handle;
             }
